@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>📋➡️📁</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: #f5f5f5;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        .buttons {
+            display: grid;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        button {
+            padding: 1.5rem;
+            font-size: 2rem;
+            cursor: pointer;
+            background: white;
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.1s ease;
+        }
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        #status {
+            font-size: 2rem;
+            margin-top: 2rem;
+            min-height: 2.5rem;
+            letter-spacing: 0.2em;
+        }
+        .file-count {
+            font-size: 1.2rem;
+            color: #666;
+            margin-bottom: 2rem;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="file-count" id="fileCount"></div>
+    <div class="buttons">
+        <button onclick="copyDirectoryFiles()">📋</button>
+        <button draggable="true" ondragstart="dragBookmarklet(event)" onclick="enableCopyPaste()">🔓</button>
+    </div>
+    <div id="status"></div>
+
+    <script>
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        // Drag-and-drop bookmarklet functionality
+        function dragBookmarklet(event) {
+            const bookmarkletCode = "javascript:(function(){const%20forceEnableCopyPaste%3D(e)%3D%3E{e.stopImmediatePropagation()%3Breturn%20true}%3B%5B'paste'%2C'copy'%5D.forEach(event%3D%3E{document.addEventListener(event%2CforceEnableCopyPaste%2Ctrue)})})();";
+            event.dataTransfer.setData('text/uri-list', bookmarkletCode);
+            event.dataTransfer.setData('text/plain', bookmarkletCode);
+        }
+
+        // Enable copy-paste functionality
+        function enableCopyPaste() {
+            const forceEnable = (e) => {
+                e.stopImmediatePropagation();
+                return true;
+            };
+            ['paste', 'copy'].forEach(event => {
+                document.addEventListener(event, forceEnable, true);
+            });
+            showStatus('✅', 2000);
+        }
+
+        // Copy directory files functionality
+        async function copyDirectoryFiles() {
+            const status = document.getElementById('status');
+            const fileCount = document.getElementById('fileCount');
+            status.textContent = '⏳';
+            fileCount.textContent = '';
+            
+            try {
+                const response = await fetch('/get-clipboard-files');
+                if (!response.ok) throw new Error();
+                
+                const files = await response.json();
+                fileCount.textContent = `📁×${files.length || 0}`;
+                
+                let progress = '';
+                for (const [index, file] of files.entries()) {
+                    await navigator.clipboard.writeText(file.content);
+                    const content = await navigator.clipboard.readText();
+                    if (content !== file.content) throw new Error();
+                    
+                    progress += '✅';
+                    status.textContent = progress + (index < files.length-1 ? '⏳' : '');
+                    status.style.animation = 'pulse 500ms infinite';
+                    await sleep(500);
+                }
+
+                status.style.animation = '';
+                status.textContent = progress + '✨';
+                setTimeout(() => status.textContent = '', 3000);
+            } catch {
+                status.style.animation = '';
+                showStatus('❌', 3000);
+            }
+        }
+
+        // Show status emoji
+        function showStatus(emoji, duration) {
+            const status = document.getElementById('status');
+            status.textContent = emoji;
+            if (duration) setTimeout(() => status.textContent = '', duration);
+        }
+    </script>
+</body>
+</html>
