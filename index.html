@@ -79,7 +79,7 @@
             showStatus('✅', 2000);
         }
 
-        // Copy directory files functionality
+        // Copy directory files functionality with improved handling for complex content
         async function copyDirectoryFiles() {
             const status = document.getElementById('status');
             const fileCount = document.getElementById('fileCount');
@@ -88,18 +88,45 @@
             
             try {
                 const response = await fetch('/get-clipboard-files');
-                if (!response.ok) throw new Error();
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 
                 const files = await response.json();
                 fileCount.textContent = `📁×${files.length || 0}`;
                 
                 let progress = '';
                 for (const [index, file] of files.entries()) {
-                    await navigator.clipboard.writeText(file.content);
-                    const content = await navigator.clipboard.readText();
-                    if (content !== file.content) throw new Error();
-                    
-                    progress += '✅';
+                    try {
+                        // Normalize line endings and trim whitespace
+                        const normalizedContent = file.content
+                            .replace(/\r\n/g, '\n')  // Convert CRLF to LF
+                            .trim();
+
+                        await navigator.clipboard.writeText(normalizedContent);
+                        
+                        // Added delay for large content
+                        await sleep(200);
+                        
+                        const clipboardContent = await navigator.clipboard.readText();
+                        
+                        // Compare normalized versions
+                        const normalizedClipboard = clipboardContent
+                            .replace(/\r\n/g, '\n')
+                            .trim();
+
+                        if (normalizedContent !== normalizedClipboard) {
+                            console.error('Content mismatch:', {
+                                original: normalizedContent,
+                                clipboard: normalizedClipboard
+                            });
+                            throw new Error('Content verification failed');
+                        }
+
+                        progress += '✅';
+                    } catch (error) {
+                        console.error('Error processing file:', error);
+                        throw error;
+                    }
+
                     status.textContent = progress + (index < files.length-1 ? '⏳' : '');
                     status.style.animation = 'pulse 500ms infinite';
                     await sleep(500);
@@ -108,7 +135,8 @@
                 status.style.animation = '';
                 status.textContent = progress + '✨';
                 setTimeout(() => status.textContent = '', 3000);
-            } catch {
+            } catch (error) {
+                console.error('Operation failed:', error);
                 status.style.animation = '';
                 showStatus('❌', 3000);
             }
